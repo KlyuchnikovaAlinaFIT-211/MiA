@@ -1,0 +1,153 @@
+services:
+  # --- Databases ---
+  backend-db:
+    image: postgres:16-alpine
+    container_name: blog-backend-db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - backend_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blog-network
+
+  users-db:
+    image: postgres:16-alpine
+    container_name: blog-users-db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB_USERS}
+    ports:
+      - "5433:5432"
+    volumes:
+      - users_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB_USERS}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - blog-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: blog-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - blog-network
+
+  # --- Services ---
+  backend:
+    build:
+      context: ./services/backend
+      dockerfile: Dockerfile
+    container_name: blog-backend
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@backend-db:5432/${POSTGRES_DB}
+      UVICORN_ARGS: --reload
+      REDIS_URL: redis://redis:6379/0
+      NOTIFICATIONS_QUEUE: post_notifications
+    volumes:
+      - ./services/backend/src:/app/src
+      - ./services/backend/alembic:/app/alembic
+    depends_on:
+      backend-db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - blog-network
+
+  users-api:
+    build:
+      context: ./services/users
+      dockerfile: Dockerfile
+    container_name: blog-users-api
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@users-db:5432/${POSTGRES_DB_USERS}
+      UVICORN_ARGS: --reload
+      REDIS_URL: redis://redis:6379/0
+      NOTIFICATIONS_QUEUE: post_notifications
+      PUSH_SERVICE_URL: http://push-notificator:8000/api/v1/notify
+    volumes:
+      - ./services/users/src:/app/src
+      - ./services/users/alembic:/app/alembic
+    depends_on:
+      users-db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - blog-network
+
+  notifications-worker:
+    build:
+      context: ./services/users
+      dockerfile: Dockerfile
+    container_name: blog-notifications-worker
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@users-db:5432/${POSTGRES_DB_USERS}
+      REDIS_URL: redis://redis:6379/0
+      NOTIFICATIONS_QUEUE: post_notifications
+      PUSH_SERVICE_URL: http://push-notificator:8000/api/v1/notify
+    command: >-
+      sh -c "python wait-for-db.py && python -m src.workers.notifications"
+    volumes:
+      - ./services/users/src:/app/src
+      - ./services/users/alembic:/app/alembic
+    depends_on:
+      users-db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      push-notificator:
+        condition: service_started
+    networks:
+      - blog-network
+
+  # --- Gateway ---
+  gateway:
+    image: nginx:alpine
+    container_name: blog-gateway
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "${GATEWAY_PORT}:80"
+    depends_on:
+      - backend
+      - users-api
+      - push-notificator
+    networks:
+      - blog-network
+
+  push-notificator:
+    image: ghcr.io/ayusavin/push-notification-playground:1.0.0
+    container_name: blog-push-notificator
+    ports:
+      - "8005:8000"
+    networks:
+      - blog-network
+
+volumes:
+  backend_postgres_data:
+  users_postgres_data:
+
+networks:
+  blog-network:
+    driver: bridge
