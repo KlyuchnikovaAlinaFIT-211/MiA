@@ -13,7 +13,6 @@ from src.infrastructure.db.deps import get_db
 from src.infrastructure.db.models import Article, Tag, ArticleTag
 from src.common.utils.slugify import slugify
 from src.common.security.deps import get_current_user, User
-from src.infrastructure.queue.post_notifications import enqueue_article_notification
 
 logger = logging.getLogger(__name__)
 
@@ -50,23 +49,6 @@ async def create_article(payload: ArticleCreate, db: AsyncSession = Depends(get_
 
     result = await db.execute(select(Article).options(selectinload(Article.tags)).where(Article.id == article.id))
     article_with_tags = result.scalar_one()
-    
-    # Enqueue notification for subscribers
-    try:
-        job_id = await enqueue_article_notification(
-            author_id=current_user.id,
-            article_id=article_with_tags.id,
-            article_title=article_with_tags.title,
-        )
-        logger.info(
-            "Notification job enqueued for article",
-            extra={"job_id": job_id, "author_id": current_user.id, "article_id": article_with_tags.id},
-        )
-    except Exception:  # pragma: no cover - defensive logging
-        logger.exception(
-            "Failed to enqueue article notification",
-            extra={"author_id": current_user.id, "article_id": article_with_tags.id},
-        )
     
     return ArticleOut(slug=article_with_tags.slug, title=article_with_tags.title, description=article_with_tags.description, body=article_with_tags.body, tagList=[t.name for t in article_with_tags.tags])
 
@@ -150,5 +132,3 @@ async def delete_article(slug: str, db: AsyncSession = Depends(get_db), current_
     await db.delete(article)
     await db.commit()
     return {"status": "deleted", "slug": slug}
-
-
