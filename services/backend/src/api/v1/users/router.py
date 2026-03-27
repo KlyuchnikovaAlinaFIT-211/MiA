@@ -16,8 +16,7 @@ from src.infrastructure.db.deps import get_db
 from src.infrastructure.db.models import User
 from src.common.security.passwords import hash_password, verify_password
 from src.common.security.jwt import create_access_token
-from src.common.security.deps import get_current_user
-
+from src.common.security.deps import get_current_user_model
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -52,12 +51,12 @@ async def login_user(payload: UserLogin, db: AsyncSession = Depends(get_db)) -> 
 
 
 @router.get("/me", response_model=UserOut)
-async def get_me(current_user: User = Depends(get_current_user)) -> UserOut:
+async def get_me(current_user: User = Depends(get_current_user_model)) -> UserOut:
     return UserOut.model_validate(current_user)
 
 
 @router.put("/me", response_model=UserOut)
-async def update_current_user(payload: UserUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)) -> UserOut:
+async def update_current_user(payload: UserUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user_model)) -> UserOut:
     if payload.email and payload.email != current_user.email:
         result = await db.execute(select(User).where(User.email == payload.email))
         if result.scalar_one_or_none():

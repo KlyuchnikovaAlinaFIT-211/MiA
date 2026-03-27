@@ -1,102 +1,42 @@
 services:
-  # --- Databases ---
-  backend-db:
+  db:
     image: postgres:16-alpine
-    container_name: blog-backend-db
-    env_file:
-      - .env
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-    ports:
-      - "5432:5432"
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: app
     volumes:
-      - backend_postgres_data:/var/lib/postgresql/data
+      - db_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - blog-network
 
-  users-db:
-    image: postgres:16-alpine
-    container_name: blog-users-db
-    env_file:
-      - .env
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB_USERS}
-    ports:
-      - "5433:5432"
-    volumes:
-      - users_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB_USERS}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - blog-network
-
-  # --- Services ---
-  backend:
+  app:
     build:
       context: ./services/backend
       dockerfile: Dockerfile
-    container_name: blog-backend
-    env_file:
-      - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@backend-db:5432/${POSTGRES_DB}
-      UVICORN_ARGS: --reload
+      DATABASE_URL: postgresql+asyncpg://app:app@db/app
+      JWT_SECRET: ${JWT_SECRET:-your-secret-key}
+    ports:
+      - "8000:8000"
     volumes:
       - ./services/backend/src:/app/src
       - ./services/backend/alembic:/app/alembic
     depends_on:
-      backend-db:
+      db:
         condition: service_healthy
-    networks:
-      - blog-network
-
-  users-api:
-    build:
-      context: ./services/users
-      dockerfile: Dockerfile
-    container_name: blog-users-api
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@users-db:5432/${POSTGRES_DB_USERS}
-      UVICORN_ARGS: --reload
-      PUSH_SERVICE_URL: http://push-notificator:8000/api/v1/notify
-    volumes:
-      - ./services/users/src:/app/src
-      - ./services/users/alembic:/app/alembic
-    depends_on:
-      users-db:
-        condition: service_healthy
-    networks:
-      - blog-network
-      
-  # --- Gateway ---
-  gateway:
-    image: nginx:alpine
-    container_name: blog-gateway
-    volumes:
-      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
-    ports:
-      - "${GATEWAY_PORT}:80"
-    depends_on:
-      - backend
-      - users-api
-      - push-notificator
     networks:
       - blog-network
 
 volumes:
-  backend_postgres_data:
-  users_postgres_data:
+  db_data:
 
 networks:
   blog-network:
     driver: bridge
+    

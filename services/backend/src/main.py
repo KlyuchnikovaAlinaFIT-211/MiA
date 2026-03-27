@@ -4,13 +4,14 @@ from fastapi import FastAPI
 
 from src.api.v1.articles.router import router as articles_router
 from src.api.v1.comments.router import router as comments_router
+from src.api.v1.users.router import router as users_router
 
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="Blog Backend API",
+        title="Blog API (Monolith)",
         version="1.0.0",
-        description="API для статей и комментариев (без пользователей)",
+        description="Монолитное приложение: пользователи, статьи, комментарии",
         docs_url="/docs",
         openapi_url="/openapi.json",
     )
@@ -21,6 +22,7 @@ def create_app() -> FastAPI:
 
     app.include_router(articles_router, prefix="/api")
     app.include_router(comments_router, prefix="/api")
+    app.include_router(users_router, prefix="/api")
 
     return app
 
