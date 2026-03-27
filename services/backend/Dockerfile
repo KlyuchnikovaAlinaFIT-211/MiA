@@ -11,7 +11,7 @@ RUN apk update && apk add --no-cache \
 
 # Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 60 -r requirements.txt
 
 # Copy application code
 COPY . .
