@@ -48,3 +48,4 @@
   ```bash
   docker-compose down -v
   ```
+http://localhost:8000/docs
