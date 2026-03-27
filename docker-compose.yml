@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - backend_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,7 +27,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB_USERS}
     ports:
-      - "5433:5432"
+      - "5435:5432"
     volumes:
       - users_postgres_data:/var/lib/postgresql/data
     healthcheck:
